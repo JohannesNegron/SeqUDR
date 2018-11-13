@@ -10,11 +10,11 @@ function WriteImageS1(Image,Directory,Filename,Suffix)
 % OUTPUT
 % <none> 
 
-Filepath1 = [Directory '\' Filename(1:end-4) Suffix '.TIF'];
+Filepath1 = [Directory '/' Filename(1:end-4) Suffix '.TIF'];
 imwrite(Image,Filepath1);
 
-Filepath2 = [Directory '\' Filename(1:end-4) Suffix '.mat'];
-save(Filepath2,'Image');
+%Filepath2 = [Directory '/' Filename(1:end-4) Suffix '.mat'];
+%save(Filepath2,'Image');
 
 
 end

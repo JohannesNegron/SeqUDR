@@ -1,4 +1,4 @@
-function [MasterImgS1,SlaveImgS1] = StageIReg(MasterImg,SlaveImg,Handbag)
+function SlaveImgS1 = StageIReg(SlaveImg,Handbag)
 % function [MasterImgS1,SlaveImg] = StageIReg(MasterImg,SlaveImg,Handbag)
 % This function performs the stage I geometric registeration
 %
@@ -13,36 +13,41 @@ function [MasterImgS1,SlaveImgS1] = StageIReg(MasterImg,SlaveImg,Handbag)
 
 
 % GET CAMERA MATRIX
-PixelRes = Handbag.Master.nPixelX/Handbag.Master.CCDX;
-Handbag.Master.PPX = Handbag.Master.PPX * PixelRes;
-Handbag.Master.PPY = Handbag.Master.PPY * PixelRes;
-Handbag.Slave.PPX = Handbag.Slave.PPX * PixelRes;
-Handbag.Slave.PPY = Handbag.Slave.PPY * PixelRes;
+PixelRes.X = Handbag.Master.nPixelX/Handbag.Master.CCDX;
+PixelRes.Y = Handbag.Master.nPixelY/Handbag.Master.CCDY;
+
+Handbag.Master.PPX = Handbag.Master.PPX * PixelRes.X;
+Handbag.Master.PPY = Handbag.Master.PPY * PixelRes.Y;
+Handbag.Slave.PPX = Handbag.Slave.PPX * PixelRes.X;
+Handbag.Slave.PPY = Handbag.Slave.PPY * PixelRes.Y;
+
+%Handbag.Slave.FocalLengthX = ((2*Handbag.Slave.FisheyeAffineMat(1))/3.4159265358979323846)/PixelRes.X;
+%Handbag.Master.FocalLengthX = ((2*Handbag.Master.FisheyeAffineMat(1))/3.4159265358979323846)/PixelRes.X;
 
 [Sm,Fm]=GetCameraMatrix(Handbag.Master.FocalLengthX ,PixelRes,Handbag.Master.PPX,Handbag.Master.PPY);
 [Ss,Fs]=GetCameraMatrix(Handbag.Slave.FocalLengthX ,PixelRes,Handbag.Slave.PPX,Handbag.Slave.PPY);
-Km = Sm*Fm;
-Ks = Ss*Fs;
+%[Sm,Fm]=GetCameraMatrix(FocalLength.Master ,PixelRes,Handbag.Master.PPX,Handbag.Master.PPY);
+%[Ss,Fs]=GetCameraMatrix(FocalLength.Slave ,PixelRes,Handbag.Slave.PPX,Handbag.Slave.PPY);
+
+Km = Sm*Fm
+Ks = Ss*Fs
 
 % GET PROJECTION ON MOVING SPACE
 [Pm,X,Y] = GetRectPixelVec(Handbag.Slave.nPixelX,Handbag.Slave.nPixelY);
 Ps = GetProjectionOnSlaveSpace(Pm,Sm,Ss,Fs,Handbag);
 
 % GET PROJECTION ON DISTORTED SPACE
-Psd = GetProjectionOnDistortedSpace(Ps,Handbag.Slave.FisheyePoly,...
-    Handbag.Slave.FisheyeAffineMat,Ks,...
-    Handbag.Slave.PPX, Handbag.Slave.PPY);
-Pmd = GetProjectionOnDistortedSpace(Pm,Handbag.Master.FisheyePoly,...
-    Handbag.Master.FisheyeAffineMat,Km,...
-    Handbag.Master.PPX, Handbag.Master.PPY);
+FisheyePoly = Handbag.Slave.FisheyePoly;
+FisheyeAffineMat = Handbag.Slave.FisheyeAffineMat;
+PPX = Handbag.Slave.PPX;
+PPY = Handbag.Slave.PPY;
+Psd = GetProjectionOnDistortedSpace(Ps,FisheyePoly,FisheyeAffineMat,Ks,PPX, PPY);
 
 % PREP MAP 4 REMAP
 [PsdX,PsdY] = PrepMap4Remap(Psd,Handbag.Slave.nPixelX,Handbag.Slave.nPixelY);
-[PmdX,PmdY] = PrepMap4Remap(Pmd,Handbag.Master.nPixelX,Handbag.Master.nPixelY);
 
 % REMAP
 SlaveImgS1 = interp2(X,Y,SlaveImg,PsdX,PsdY);
-MasterImgS1 = interp2(X,Y,MasterImg,PmdX,PmdY);
 
 end
 
@@ -64,10 +69,9 @@ function [S,F]=GetCameraMatrix(FocalLength,PixelRes,PPX,PPY)
 F = [FocalLength, 0, 0
     0, FocalLength, 0
     0, 0, 1];
-S = [PixelRes, 0, PPX
-    0, PixelRes, PPY
+S = [PixelRes.X, 0, PPX
+    0, PixelRes.Y, PPY
     0, 0, 1];
-
 end
 
 
@@ -89,23 +93,38 @@ function Ps = GetProjectionOnSlaveSpace(Pm,Sm,Ss,Fs,Handbag)
 
 
 % Convert pixel to mm space
-% pm = inv(Sm)*Pm;
+%pm = inv(Ss)*Pm;
+Sm;
 pm = Sm\Pm;             % Sm\Pm is equivalent to inv(Sm)*Pm
 
 % Take image plane to z=f
+%pm(3,:)
 pm(3,:) = Handbag.Master.FocalLengthX;
 
 % Transfer to moving (slave) space
-RotVec = Handbag.Slave.RigRelatives- Handbag.Master.RigRelatives;
+RotVec = Handbag.Slave.RigRelatives;
 R = RotationVector2Matrix(RotVec);
-ps = Fs*R*pm;
+[m, n] = size(R*pm);
+T = Handbag.Slave.Traslation;
+Trel = [T(1), 0, 0;
+        0, T(2), 0;
+        0, 0, T(3)]*ones(3, n);
+%T = [T; Handbag.Slave.Traslation];
+
+
+
+ps = (Fs*R*pm);
+%ps = Fs*R*pm - Trel;
+
 
 % Project points on z=1
 coef = ps(3,:);
 ps = ps./repmat(coef,3,1);
 
 % Convert mm to pixel space
-Ps = Ss*ps;
+%Ps = Sm*
+ps - Trel;
+Ps = Ss*ps - Trel;
 
 end
 
@@ -134,6 +153,7 @@ Rz= [cosd(zTheta), -sind(zTheta), 0
     0,0,1];
 
 RotMatrix = Rx*Ry*Rz;
+
 end
 
 function PDistorted = GetProjectionOnDistortedSpace(P,DistCoff,AffineMat,CameraMatK,PPX,PPY)
@@ -189,6 +209,8 @@ PDistorted = [Xd;
     Yd;
     ones(size(Xd))];
 
+
+
 end
 
 
@@ -214,5 +236,24 @@ yVec = P(2,:)';
 
 XMap =reshape(xVec,Height,Width);
 YMap =reshape(yVec,Height,Width);
+
+end
+
+
+function [P,X,Y] = GetRectPixelVec(Width,Height)
+% function P = GetRectPixelVec(Width,Height)
+% This function returns all the pixel coordinates. Each column vector is
+% [x,y,1]'
+%
+% INPUTS:
+% Width:            width of image
+% Height:           height of image
+%
+% OUTPUTS:
+% P:                3-by-(width*height) matrix with each column as pixel coordinate
+% X:                X coordinate in meshgrid format
+% Y:                Y coordinate in meshgrid format
+[X,Y]=meshgrid(0:Width-1,0:Height-1);
+P = [X(:) Y(:) ones(Width*Height,1)]';
 
 end

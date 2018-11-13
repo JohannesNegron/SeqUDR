@@ -13,3 +13,4 @@ Simply download the code (or clone) and follow the following steps:
 ### Contact
 You can email me for basic bugs at muzammil360@gmail.com
 
+# SeqUDR
