@@ -13,42 +13,30 @@ function SlaveImgS1 = StageIReg(SlaveImg,Handbag)
 
 
 % GET CAMERA MATRIX
-PixelRes.X = Handbag.Master.nPixelX/Handbag.Master.CCDX;
-PixelRes.Y = Handbag.Master.nPixelY/Handbag.Master.CCDY;
+PixelRes.X = Handbag.Slave.nPixelX/Handbag.Slave.CCDX;
+PixelRes.Y = Handbag.Slave.nPixelY/Handbag.Slave.CCDY;
 
-Handbag.Master.PPX = Handbag.Master.PPX * PixelRes.X;
-Handbag.Master.PPY = Handbag.Master.PPY * PixelRes.Y;
 Handbag.Slave.PPX = Handbag.Slave.PPX * PixelRes.X;
 Handbag.Slave.PPY = Handbag.Slave.PPY * PixelRes.Y;
 
-%Handbag.Slave.FocalLengthX = ((2*Handbag.Slave.FisheyeAffineMat(1))/3.4159265358979323846)/PixelRes.X;
-%Handbag.Master.FocalLengthX = ((2*Handbag.Master.FisheyeAffineMat(1))/3.4159265358979323846)/PixelRes.X;
 
-[Sm,Fm]=GetCameraMatrix(Handbag.Master.FocalLengthX ,PixelRes,Handbag.Master.PPX,Handbag.Master.PPY);
 [Ss,Fs]=GetCameraMatrix(Handbag.Slave.FocalLengthX ,PixelRes,Handbag.Slave.PPX,Handbag.Slave.PPY);
-%[Sm,Fm]=GetCameraMatrix(FocalLength.Master ,PixelRes,Handbag.Master.PPX,Handbag.Master.PPY);
-%[Ss,Fs]=GetCameraMatrix(FocalLength.Slave ,PixelRes,Handbag.Slave.PPX,Handbag.Slave.PPY);
-
-Km = Sm*Fm
-Ks = Ss*Fs
+Ks = Ss*Fs;
 
 % GET PROJECTION ON MOVING SPACE
 [Pm,X,Y] = GetRectPixelVec(Handbag.Slave.nPixelX,Handbag.Slave.nPixelY);
-Ps = GetProjectionOnSlaveSpace(Pm,Sm,Ss,Fs,Handbag);
 
 % GET PROJECTION ON DISTORTED SPACE
-FisheyePoly = Handbag.Slave.FisheyePoly;
-FisheyeAffineMat = Handbag.Slave.FisheyeAffineMat;
-PPX = Handbag.Slave.PPX;
-PPY = Handbag.Slave.PPY;
-Psd = GetProjectionOnDistortedSpace(Ps,FisheyePoly,FisheyeAffineMat,Ks,PPX, PPY);
-
+FisheyePoly         = Handbag.Slave.FisheyePoly;
+FisheyeAffineMat    = Handbag.Slave.FisheyeAffineMat;
+PPX                 = Handbag.Slave.PPX;
+PPY                 = Handbag.Slave.PPY;
+Psd                 = GetProjectionOnDistortedSpace(Pm,FisheyePoly,FisheyeAffineMat,Ks,PPX, PPY);
+R                   = RotationVector2Matrix(Handbag.Slave.RigRelatives);
+Psd                 = (R'*Psd);
 % PREP MAP 4 REMAP
 [PsdX,PsdY] = PrepMap4Remap(Psd,Handbag.Slave.nPixelX,Handbag.Slave.nPixelY);
-
-% REMAP
 SlaveImgS1 = interp2(X,Y,SlaveImg,PsdX,PsdY);
-
 end
 
 
@@ -75,86 +63,8 @@ S = [PixelRes.X, 0, PPX
 end
 
 
-function Ps = GetProjectionOnSlaveSpace(Pm,Sm,Ss,Fs,Handbag)
-% function Ps = GetProjectionOnSlaveSpace(Pm)
-% This function converts points from master space to slave
-% space
-% Unit of points is pixels
-% 
-% INPUTS:
-% Pm:           Output of GetRectPixelVec() function
-% Sm:           S matrix of master camera
-% Ss:           S matrix of slave camera
-% Fs:           F matrix of slave camera
-% Handbag: structure holding params for processing
-%
-% OUTPUTS:
-% Ps:          correspoing slave space points (pixel coor)
 
 
-% Convert pixel to mm space
-%pm = inv(Ss)*Pm;
-Sm;
-pm = Sm\Pm;             % Sm\Pm is equivalent to inv(Sm)*Pm
-
-% Take image plane to z=f
-%pm(3,:)
-pm(3,:) = Handbag.Master.FocalLengthX;
-
-% Transfer to moving (slave) space
-RotVec = Handbag.Slave.RigRelatives;
-R = RotationVector2Matrix(RotVec);
-[m, n] = size(R*pm);
-T = Handbag.Slave.Traslation;
-Trel = [T(1), 0, 0;
-        0, T(2), 0;
-        0, 0, T(3)]*ones(3, n);
-%T = [T; Handbag.Slave.Traslation];
-
-
-
-ps = (Fs*R*pm);
-%ps = Fs*R*pm - Trel;
-
-
-% Project points on z=1
-coef = ps(3,:);
-ps = ps./repmat(coef,3,1);
-
-% Convert mm to pixel space
-%Ps = Sm*
-ps - Trel;
-Ps = Ss*ps - Trel;
-
-end
-
-function RotMatrix = RotationVector2Matrix(Theta)
-% function RotMatrix = RotationVector2Matrix(Theta)
-% This function converts a rotation vector to a matrix
-% INPUTS
-% Theta:            3 element vector containing rotation about x,y,z respectively
-%
-% OUTPUTS:
-% RotMatrix:        Rotation matrix
-
-xTheta = Theta(1);
-yTheta = Theta(2);
-zTheta = Theta(3);
-
-
-Rx= [1,0,0 
-    0, cosd(xTheta), -sind(xTheta) 
-    0, sind(xTheta), cosd(xTheta)];
-Ry= [cosd(yTheta), 0, sind(yTheta) 
-    0, 1,0
-    -sind(yTheta), 0, cosd(yTheta)];
-Rz= [cosd(zTheta), -sind(zTheta), 0 
-    sind(zTheta), cosd(zTheta), 0 
-    0,0,1];
-
-RotMatrix = Rx*Ry*Rz;
-
-end
 
 function PDistorted = GetProjectionOnDistortedSpace(P,DistCoff,AffineMat,CameraMatK,PPX,PPY)
 % function PDistorted = GetProjectionOnDistortedSpace(P,DistCoff,AffineMat,CameraMatK,PPX,PPY)
@@ -213,7 +123,34 @@ PDistorted = [Xd;
 
 end
 
+function RotMatrix = RotationVector2Matrix(Theta)
+% function RotMatrix = RotationVector2Matrix(Theta)
+% This function converts a rotation vector to a matrix
+% INPUTS
+% Theta:            3 element vector containing rotation about x,y,z respectively
+%
+% OUTPUTS:
+% RotMatrix:        Rotation matrix
 
+xTheta = Theta(1);
+yTheta = Theta(2);
+zTheta = Theta(3);
+
+
+Rx= [1,            0,             0 
+     0, cosd(xTheta), -sind(xTheta) 
+     0, sind(xTheta), cosd(xTheta)];
+
+Ry= [cosd(yTheta), 0, sind(yTheta) 
+     0           , 1,            0
+    -sind(yTheta), 0, cosd(yTheta)];
+
+Rz= [cosd(zTheta), -sind(zTheta), 0 
+     sind(zTheta),  cosd(zTheta), 0 
+     0           ,0             ,1];
+
+RotMatrix = Rx*Ry*Ry;
+end
 
 function [XMap,YMap] = PrepMap4Remap(P,Width,Height)
 % function [XMap,YMap] = PrepMap4Remap(P)
@@ -229,21 +166,16 @@ function [XMap,YMap] = PrepMap4Remap(P,Width,Height)
 %
 % Note: For info on XMap and YMap, please see "Geometric Image Transformations" of opencv
 % documentation 
-
-
 xVec = P(1,:)';
 yVec = P(2,:)';
 
 XMap =reshape(xVec,Height,Width);
 YMap =reshape(yVec,Height,Width);
-
 end
-
 
 function [P,X,Y] = GetRectPixelVec(Width,Height)
 % function P = GetRectPixelVec(Width,Height)
-% This function returns all the pixel coordinates. Each column vector is
-% [x,y,1]'
+% This function returns all the pixel coordinates. Each column vector is [x,y,1]'
 %
 % INPUTS:
 % Width:            width of image
@@ -255,5 +187,4 @@ function [P,X,Y] = GetRectPixelVec(Width,Height)
 % Y:                Y coordinate in meshgrid format
 [X,Y]=meshgrid(0:Width-1,0:Height-1);
 P = [X(:) Y(:) ones(Width*Height,1)]';
-
 end
