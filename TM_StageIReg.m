@@ -19,22 +19,8 @@ for i = 1:nargin
 
         long_name = imagefiles{i,1};
         short_name = long_name(4+folder_n:end);
-        
         Img = ReadImageS1(long_name);
-        %{
-        Handbag.Master.FocalLengthX = 3.98;   % mm - along x axis
-        Handbag.Master.FocalLengthY = 3.98;   % mm - along y axis
-        Handbag.Master.PPX = 2.50202;         % mm - X principal point 
-        Handbag.Master.PPY = 1.870268;        % mm - Y principal point 
-        Handbag.Master.CCDX = 4.8;            % mm - CCD width (along X)
-        Handbag.Master.CCDY = 3.6;            % mm - CCD height (along Y)
-        Handbag.Master.nPixelX = 1280;        % pixels - along X axis
-        Handbag.Master.nPixelY = 960;         % pixels - along Y axis
-        Handbag.Master.FisheyeAffineMat = [1663.093010806,0,0,1663.093010806];
-        Handbag.Master.FisheyePoly = [0,1,0.005510503,-0.139223063];
-        Handbag.Master.RigRelatives = [0,0,0];
-        Handbag.Master.Traslation = [0,0,0];
-        %}
+
         if strfind(long_name, "GRE") > 0
             Handbag.Slave.FocalLengthX = 3.98;   % mm - along x axis
             Handbag.Slave.FocalLengthY = 3.98;   % mm - along y axis
